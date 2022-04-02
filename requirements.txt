@@ -1,0 +1,4 @@
+click
+dotenv
+pyyaml
+requests

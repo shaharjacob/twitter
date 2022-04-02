@@ -1,0 +1,28 @@
+
+# stop collecting tweets when reaching that number.
+# 0 for taking all the tweets.
+max_results_size: 138
+
+# what the time period to looking on.
+# if you intrested only in old tweets, you can use the max_results_size.
+time_from_now:
+    days: 0
+    hours: 1
+    minutes: 0
+
+query:
+    # https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query
+    # if you filling query_as_string it will override all the other fields
+    query_as_string: ""
+
+    # words that should appear in the tweets
+    must_contains: []
+
+    # words that should NOT contain in the tweets
+    must_exclude: []
+
+    # as least on of the following should be appeared
+    contains_at_least_one:
+        - unfollow
+        - unfollowing
+        - unfollowed
