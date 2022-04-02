@@ -35,7 +35,7 @@ class Twitter(object):
     
 
     def search_wrapper(self, path: Path = current_dir / 'config.yaml') -> dict:
-        with open(path, 'w') as f:
+        with open(path, 'r') as f:
             config = yaml.load(f, Loader=yaml.SafeLoader)
         
         query = []
@@ -69,14 +69,22 @@ class Twitter(object):
     def search(self,
         query: str, # https://developer.twitter.com/en/docs/twitter-api/tweets/search/integrate/build-a-query
         time_window: timedelta,
-        max_size: int = 0,
-        output: Union[str, Path] = 'output.json'
+        max_size: int = 0
     ) -> dict:
 
-        def dump_tweets(tweets):
-            secho(f"Saving results in {output}", fg="blue")
-            with open(output, 'w') as f:
+        def dump(tweets, includes, output):
+            tweets_output = output / 'tweets.json'
+            secho(f"Saving tweets in {tweets_output}", fg="blue")
+            with open(tweets_output, 'w') as f:
                 json.dump(tweets, f, indent='\t')
+
+            includes_output = output / 'includes.json'
+            secho(f"Saving includes in {includes_output}", fg="blue")
+            with open(includes_output, 'w') as f2:
+                json.dump(includes, f2, indent='\t')
+        
+        output_dir = current_dir / 'results' / datetime.now().strftime("%Y-%m-%d_%H:%M:%S")
+        output_dir.mkdir(mode=0o777)
 
         try:
             # end time should be at least 10 second from the request time (in UTC time)
@@ -89,11 +97,74 @@ class Twitter(object):
                 "start_time": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "end_time": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "max_results": MAX_RESULTS_PER_REQUEST,
+
+                # enable all the available information...
+                "expansions": ",".join([
+                    "attachments.poll_ids",
+                    "attachments.media_keys",
+                    "author_id",
+                    "entities.mentions.username",
+                    "geo.place_id",
+                    "in_reply_to_user_id",
+                    "referenced_tweets.id",
+                    "referenced_tweets.id.author_id"
+                ]),
+
+                # enable all the available information...
+                "place.fields": ",".join([
+                    "contained_within",
+                    "country",
+                    "country_code",
+                    "full_name",
+                    "geo",
+                    "id",
+                    "name",
+                    "place_type"
+                ]),
+
+                # enable all the available information...
+                "tweet.fields": ",".join([
+                    "attachments",
+                    "author_id",
+                    "context_annotations",
+                    "conversation_id",
+                    "created_at",
+                    "entities",
+                    "geo",
+                    "id",
+                    "in_reply_to_user_id",
+                    "lang",
+                    "public_metrics",
+                    "possibly_sensitive",
+                    "referenced_tweets",
+                    "reply_settings",
+                    "source",
+                    "text",
+                    "withheld"
+                ]),
+
+                # enable all the available information...
+                "user.fields": ",".join([
+                    "created_at",
+                    "description",
+                    "entities",
+                    "id",
+                    "location",
+                    "name",
+                    "pinned_tweet_id",
+                    "profile_image_url",
+                    "protected",
+                    "public_metrics",
+                    "url",
+                    "username",
+                    "verified",
+                    "withheld"
+                ])
             }
             payload_as_array = [f"{k}={v}" for k,v in payload.items()]
             payload_as_string = "&".join(payload_as_array)
             
-            tweets = []
+            tweets, includes = [], []
             number_of_requests = 1
             # https://developer.twitter.com/en/docs/twitter-api/tweets/search/api-reference/get-tweets-search-recent
             response = requests.get(
@@ -103,7 +174,10 @@ class Twitter(object):
                     "Authorization": f"Bearer {self.token}"
                 }
             ).json()
+
             tweets.extend(response.get("data", []))
+            if response.get("includes"):
+                includes.append(response.get("includes"))
             next_token = response.get("meta", {"next_token": ""}).get("next_token")
             while next_token:
                 time.sleep(1) # https://developer.twitter.com/en/docs/twitter-api/rate-limits
@@ -116,17 +190,19 @@ class Twitter(object):
                     }
                 ).json()
                 tweets.extend(response.get("data", []))
+                if response.get("includes"):
+                    includes.append(response.get("includes"))
                 next_token = response.get("meta", {"next_token": ""}).get("next_token")
                 number_of_requests += 1
                 if max_size > 0 and len(tweets) > max_size:
                     tweets = tweets[:max_size]
                     break
         except Exception as e:
-            dump_tweets(tweets)
+            dump(tweets, includes, output_dir)
             secho(f"[ERROR] {e}", fg="red", bold=True)
             exit(1)
         
-        dump_tweets(tweets)
+        dump(tweets, includes, output_dir)
 
         return {
             "number_of_requests": number_of_requests,
@@ -134,7 +210,8 @@ class Twitter(object):
         }
 
 
-# twitter = Twitter()
+twitter = Twitter()
+res = twitter.search_wrapper()
 # res = twitter.search(
 #     query="unfollow OR unfriend OR unfollowing OR unfollowed",
 #     time_window=timedelta(
@@ -144,7 +221,10 @@ class Twitter(object):
 #     ),
 #     max_size=1038
 # )
-# for tweet in res["tweets"]:
-#     print(tweet)
-# print(f"number of tweets: {len(res['tweets'])}")
-# print(f'number_of_requests: {res["number_of_requests"]}')
+for tweet in res["tweets"]:
+    print(tweet)
+    print()
+    print("-----------------------------------------------------------------")
+    print()
+print(f"number of tweets: {len(res['tweets'])}")
+print(f'number_of_requests: {res["number_of_requests"]}')
